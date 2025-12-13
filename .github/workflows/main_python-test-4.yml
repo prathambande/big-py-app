@@ -9,15 +9,27 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'  # Runs every hour at minute 0
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read #This is required for actions/checkout
+    outputs:
+      timestamp: ${{ steps.set-timestamp.outputs.timestamp }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Replace placeholder with current timestamp
+        id: set-timestamp
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          sed -i "s/<<<py-place-holder>>>/$TIMESTAMP/g" myproject/views.py
+          cat myproject/views.py
 
       - name: Set up Python version
         uses: actions/setup-python@v5
@@ -73,4 +85,33 @@ jobs:
         with:
           app-name: 'python-test-4'
           slot-name: 'Production'
+
+      - name: Poll /placeholder endpoint for verification
+        run: |
+          EXPECTED_VALUE="${{ needs.build.outputs.timestamp }}"
+          APP_URL=$(az webapp show --name python-test-4 --resource-group python-test-apps --query defaultHostName -o tsv)
+          ENDPOINT="https://$APP_URL/placeholder"
+          MAX_ATTEMPTS=60  # 5 minutes with 5-second intervals
+          ATTEMPT=0
           
+          echo "Expected timestamp: $EXPECTED_VALUE"
+          echo "Polling endpoint: $ENDPOINT"
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
+            
+            RESPONSE=$(curl -s -f "$ENDPOINT" || echo "FAILED")
+            
+            if [ "$RESPONSE" = "$EXPECTED_VALUE" ]; then
+              echo "✅ Success! Endpoint returned expected value: $RESPONSE"
+              exit 0
+            else
+              echo "Current response: $RESPONSE"
+              echo "Waiting 5 seconds before next attempt..."
+              sleep 5
+            fi
+          done
+          
+          echo "❌ Failed: Endpoint did not return expected value after 5 minutes"
+          exit 1
