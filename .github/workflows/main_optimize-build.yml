@@ -2,34 +2,22 @@
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 # More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
 
-name: Build and deploy Python app to Azure Web App - python-test-4
+name: Build and deploy Python app to Azure Web App - optimize-build
 
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-  schedule:
-    - cron: '25 * * * *'  # Runs every hour at minute 0
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read #This is required for actions/checkout
-    outputs:
-      timestamp: ${{ steps.set-timestamp.outputs.timestamp }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Replace placeholder with current timestamp
-        id: set-timestamp
-        run: |
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
-          sed -i "s/<<<py-place-holder>>>/$TIMESTAMP/g" myproject/views.py
-          cat myproject/views.py
 
       - name: Set up Python version
         uses: actions/setup-python@v5
@@ -38,11 +26,11 @@ jobs:
 
       # 🛠️ Local Build Section (Optional)
       # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
-      # - name: Create and Start virtual environment and Install dependencies
-      #   run: |
-      #     python -m venv antenv
-      #     source antenv/bin/activate
-      #     pip install -r requirements.txt
+      - name: Create and Start virtual environment and Install dependencies
+        run: |
+          python -m venv antenv
+          source antenv/bin/activate
+          pip install -r requirements.txt
                 
       # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
       - name: Upload artifact for deployment jobs
@@ -75,43 +63,14 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_6E623FBC400842B58FE4529201D9033F }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3D2782C04D7A44ED89F4A31E63332FD2 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3CDDCFBE910A4C55B53B8002D2DF5CCB }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_AB27790D47A34F4E80DCA0811DEE37D9 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_84AC2472D5554801A9575DD51EAE9C70 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_A4339147476945828D130CD3C79DA8B6 }}
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'python-test-4'
+          app-name: 'optimize-build'
           slot-name: 'Production'
-
-      - name: Poll /placeholder endpoint for verification
-        run: |
-          EXPECTED_VALUE="${{ needs.build.outputs.timestamp }}"
-          ENDPOINT="${{ secrets.APP_URL_PYTHON_TEST_4 }}/placeholder"
-          MAX_ATTEMPTS=60  # 5 minutes with 5-second intervals
-          ATTEMPT=0
           
-          echo "Expected timestamp: $EXPECTED_VALUE"
-          echo "Polling endpoint: $ENDPOINT"
-          
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
-            
-            RESPONSE=$(curl -s -f "$ENDPOINT" || echo "FAILED")
-            
-            if [ "$RESPONSE" = "$EXPECTED_VALUE" ]; then
-              echo "✅ Success! Endpoint returned expected value: $RESPONSE"
-              exit 0
-            else
-              echo "Current response: $RESPONSE"
-              echo "Waiting 5 seconds before next attempt..."
-              sleep 5
-            fi
-          done
-          
-          echo "❌ Failed: Endpoint did not return expected value after 5 minutes"
-
-          exit 1
